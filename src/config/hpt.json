@@ -1,0 +1,35 @@
+{
+  "num_trials": 20,
+  "hyperparameters": [
+    {
+      "name": "boosting_type",
+      "short_desc": "boosting_type options: gbdt, dart, goss, rf",
+      "type": "categorical",
+      "categories": ["gbdt", "dart"]
+    },
+    {
+      "name": "n_estimators",
+      "short_desc": "The number of trees in the forest.",
+      "type": "int",
+      "search_type": "uniform",
+      "range_low": 50,
+      "range_high": 300
+    },
+    {
+      "name": "num_leaves",
+      "short_desc": "Maximum tree leaves for base learners.",
+      "type": "int",
+      "range_low": 10,
+      "range_high": 50,
+      "search_type": "uniform"
+    },
+    {
+      "name": "learning_rate",
+      "short_desc": "Learning rate",
+      "type": "real",
+      "range_low": 5e-4,
+      "range_high": 5e-1,
+      "search_type": "log-uniform"
+    }
+  ]
+}

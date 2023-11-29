@@ -1,0 +1,9 @@
+{
+  "n_estimators": 150,
+  "lags": 20,
+  "random_state": 0,
+  "learning_rate": 0.1,
+  "boosting_type": "gbdt",
+  "num_leaves": 31,
+  "history_forecast_ratio": null
+}
