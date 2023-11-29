@@ -3,6 +3,9 @@ FROM python:3.9.17-slim-bullseye as builder
 RUN apt-get -y update && apt-get install -y --no-install-recommends dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
+RUN apt-get update
+RUN apt-get install libgomp1
+
 COPY ./requirements.txt .
 RUN pip3 install -r requirements.txt 
 
