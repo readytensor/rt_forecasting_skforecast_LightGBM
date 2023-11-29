@@ -30,6 +30,7 @@ class Forecaster:
         n_estimators: int = 100,
         boosting_type: Optional[str] = "gbdt",
         num_leaves: Optional[int] = 31,
+        max_depth: Optional[int] = -1,
         learning_rate: Optional[float] = 0.1,
         lags: Union[int, List[int]] = 7,
         random_state: int = 0,
@@ -49,6 +50,8 @@ class Forecaster:
 
             num_leaves (Optional[int]): Maximum tree leaves for base learners.
 
+            max_depth (Optional[int]): Maximum tree depth for base learners, <=0 means no limit.
+
             learning_rate (Optional[float]): Boosting learning rate.
                 You can use callbacks parameter of fit method to shrink/adapt learning rate in training using reset_parameter callback.
                 Note, that this will ignore the learning_rate argument in training.
@@ -63,6 +66,7 @@ class Forecaster:
         self.leaarning_rate = learning_rate
         self.boosting_type = boosting_type
         self.num_leaves = num_leaves
+        self.max_depth = max_depth
         self.random_state = random_state
         self.lags = lags
         self._is_trained = False
@@ -115,6 +119,7 @@ class Forecaster:
             num_leaves=self.num_leaves,
             boosting_type=self.boosting_type,
             random_state=self.random_state,
+            max_depth=self.max_depth,
             verbose=-1,
         )
         forecaster = ForecasterAutoreg(regressor=model, lags=self.lags)
