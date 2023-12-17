@@ -148,7 +148,7 @@ class Forecaster:
         data_schema: ForecastingSchema,
     ) -> None:
         """Fit the Forecaster to the training data.
-        A separate XGBoost model is fit to each series that is contained
+        A separate LightGBM model is fit to each series that is contained
         in the data.
 
         Args:
@@ -193,7 +193,7 @@ class Forecaster:
         id: int,
         future_covariates: List = None,
     ):
-        """Fit XGBoost model to given individual series of data"""
+        """Fit LightGBM model to given individual series of data"""
         model = LGBMRegressor(
             n_estimators=self.n_estimators,
             learning_rate=self.learning_rate,
