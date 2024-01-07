@@ -39,6 +39,7 @@ class Forecaster:
         use_exogenous: bool = True,
         verbose: int = 1,
         random_state: int = 0,
+        **kwargs,
     ):
         """Construct a new LGBM Forecaster
 
@@ -56,13 +57,12 @@ class Forecaster:
                 lags = forecast horizon * lags_forecast_ratio
                 This parameters overides lags parameters.
 
-
             n_estimators (int): Number of boosted trees to fit.
 
             boosting_type (Optional[str]):
-            'gbdt', traditional Gradient Boosting Decision Tree.
-            'dart', Dropouts meet Multiple Additive Regression Trees.
-            'rf', Random Forest.
+                'gbdt', traditional Gradient Boosting Decision Tree.
+                'dart', Dropouts meet Multiple Additive Regression Trees.
+                'rf', Random Forest.
 
             num_leaves (Optional[int]): Maximum tree leaves for base learners.
 
@@ -83,6 +83,8 @@ class Forecaster:
                 controls the level of LightGBM's verbosity
 
             random_state (int): Sets the underlying random seed at model initialization time.
+
+            kwargs (dict): Additional parameters accepted by the sklearn base model.
         """
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
@@ -120,6 +122,7 @@ class Forecaster:
             max_depth=self.max_depth,
             random_state=self.random_state,
             verbose=self.verbose,
+            **kwargs,
         )
 
         transformer_exog = MinMaxScaler() if has_covariates else None
