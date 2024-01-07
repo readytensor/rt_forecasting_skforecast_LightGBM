@@ -13,6 +13,7 @@ def get_logger(task_name: str) -> logging.Logger:
         logging.Logger: A logger object with the specified handlers.
     """
     logger = logging.getLogger(task_name)
+    logger.propagate = False
     logger.setLevel(logging.INFO)
 
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")

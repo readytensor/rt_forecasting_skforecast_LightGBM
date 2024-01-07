@@ -5,9 +5,10 @@ import numpy as np
 import pandas as pd
 from typing import Union, List, Optional
 from lightgbm import LGBMRegressor
-from skforecast.ForecasterAutoreg import ForecasterAutoreg
+from skforecast.ForecasterAutoregMultiSeries import ForecasterAutoregMultiSeries
 from schema.data_schema import ForecastingSchema
 from sklearn.exceptions import NotFittedError
+from sklearn.preprocessing import MinMaxScaler
 
 warnings.filterwarnings("ignore")
 
@@ -98,6 +99,11 @@ class Forecaster:
         self.end_index = {}
         self.history_length = None
 
+        has_covariates = len(
+            data_schema.future_covariates + data_schema.static_covariates
+        ) > 0 or data_schema.time_col_dtype in ["DATE", "DATETIME"]
+        self.use_exogenous = use_exogenous and has_covariates
+
         if history_forecast_ratio:
             self.history_length = (
                 self.data_schema.forecast_length * history_forecast_ratio
@@ -105,6 +111,25 @@ class Forecaster:
         if lags_forecast_ratio:
             lags = self.data_schema.forecast_length * lags_forecast_ratio
             self.lags = lags
+
+        self.base_model = LGBMRegressor(
+            n_estimators=self.n_estimators,
+            learning_rate=self.learning_rate,
+            num_leaves=self.num_leaves,
+            boosting_type=self.boosting_type,
+            max_depth=self.max_depth,
+            random_state=self.random_state,
+            verbose=self.verbose,
+        )
+
+        transformer_exog = MinMaxScaler() if has_covariates else None
+
+        self.model = ForecasterAutoregMultiSeries(
+            regressor=self.base_model,
+            lags=self.lags,
+            transformer_series=MinMaxScaler(),
+            transformer_exog=transformer_exog,
+        )
 
     def _add_future_covariates_from_date(
         self,
@@ -125,7 +150,7 @@ class Forecaster:
             is_training (bool):
                 Set to true if the process is to be done on the training data.
 
-        Returns (pd.DataFrame): The processed dataframe.
+        Returns (pd.DataFrame): The processed dataframe
         """
 
         future_covariates_names = data_schema.future_covariates
@@ -140,83 +165,70 @@ class Forecaster:
             if is_training:
                 future_covariates_names += [year_col_name, month_col_name]
 
-        return history, future_covariates_names
+        return history
+
+    def crop_data(self, all_series: List[pd.DataFrame]) -> List[pd.DataFrame]:
+        """
+        Reduces the data based on the history_length attribute.
+
+        Args:
+            all_series (List[pd.DataFrame]): List of the original data to be reduced.
+
+        Returns (List[pd.DataFrame]): List of the reduced data.
+
+        """
+
+        new_length = []
+        for series in all_series:
+            series = series.iloc[-self.history_length :]
+            new_length.append(series.copy())
+        all_series = new_length
+        return all_series
 
     def fit(
         self,
         history: pd.DataFrame,
-        data_schema: ForecastingSchema,
     ) -> None:
         """Fit the Forecaster to the training data.
-        A separate LightGBM model is fit to each series that is contained
+        A separate Adaboost model is fit to each series that is contained
         in the data.
 
         Args:
             history (pandas.DataFrame): The features of the training data.
-            data_schema (ForecastingSchema): The schema of the training data.
         """
         np.random.seed(self.random_state)
-        (
-            history,
-            future_covariates,
-        ) = self._add_future_covariates_from_date(
+        data_schema = self.data_schema
+        history = self._add_future_covariates_from_date(
             history=history, data_schema=data_schema, is_training=True
         )
         groups_by_ids = history.groupby(data_schema.id_col)
         all_ids = list(groups_by_ids.groups.keys())
         all_series = [
-            groups_by_ids.get_group(id_).drop(columns=data_schema.id_col)
+            groups_by_ids.get_group(id_).drop(columns=data_schema.id_col).reset_index()
             for id_ in all_ids
         ]
 
-        self.models = {}
+        if self.history_length:
+            all_series = self.crop_data(all_series)
 
-        for id, series in zip(all_ids, all_series):
-            if self.history_length:
-                series = series[-self.history_length :]
-            model = self._fit_on_series(
-                history=series,
-                data_schema=data_schema,
-                id=id,
-                future_covariates=future_covariates,
+        targets = [series[data_schema.target] for series in all_series]
+        target_series = pd.DataFrame({f"id_{k}": v for k, v in zip(all_ids, targets)})
+
+        exog = None
+
+        if self.use_exogenous:
+            covariates_names = (
+                data_schema.future_covariates + data_schema.static_covariates
             )
-            self.models[id] = model
+            exog = [series[covariates_names] for series in all_series]
+            exog = pd.concat(exog, axis=1)
+            exog.columns = [str(i) for i in range(exog.shape[1])]
+            self.train_end_index = all_series[0].index.values[-1]
+
+        self.model.fit(series=target_series, exog=exog)
 
         self.all_ids = all_ids
         self._is_trained = True
-        self.data_schema = data_schema
-
-    def _fit_on_series(
-        self,
-        history: pd.DataFrame,
-        data_schema: ForecastingSchema,
-        id: int,
-        future_covariates: List = None,
-    ):
-        """Fit LightGBM model to given individual series of data"""
-        model = LGBMRegressor(
-            n_estimators=self.n_estimators,
-            learning_rate=self.learning_rate,
-            num_leaves=self.num_leaves,
-            boosting_type=self.boosting_type,
-            max_depth=self.max_depth,
-            random_state=self.random_state,
-            verbose=self.verbose,
-        )
-        forecaster = ForecasterAutoreg(regressor=model, lags=self.lags)
-
-        covariates = future_covariates
-
-        history.index = pd.RangeIndex(start=0, stop=len(history))
-
-        self.end_index[id] = len(history)
-        exog = None
-        if covariates and self.use_exogenous:
-            exog = history[covariates]
-
-        forecaster.fit(y=history[data_schema.target], exog=exog)
-
-        return forecaster
 
     def predict(self, test_data: pd.DataFrame, prediction_col_name: str) -> np.ndarray:
         """Make the forecast of given length.
@@ -230,57 +242,40 @@ class Forecaster:
         if not self._is_trained:
             raise NotFittedError("Model is not fitted yet.")
 
-        test_data, future_covariates = self._add_future_covariates_from_date(
+        test_data = self._add_future_covariates_from_date(
             history=test_data, data_schema=self.data_schema, is_training=False
         )
 
         groups_by_ids = test_data.groupby(self.data_schema.id_col)
         all_series = [
-            groups_by_ids.get_group(id_).drop(columns=self.data_schema.id_col)
+            groups_by_ids.get_group(id_)
+            .drop(columns=self.data_schema.id_col)
+            .reset_index()
             for id_ in self.all_ids
         ]
-        # forecast one series at a time
-        all_forecasts = []
-        for id_, series_df in zip(self.all_ids, all_series):
-            forecast = self._predict_on_series(
-                key_and_future_df=(id_, series_df),
-                id=id_,
-                future_covariates=future_covariates,
-            )
-            forecast.insert(0, self.data_schema.id_col, id_)
-            all_forecasts.append(forecast)
-
-        # concatenate all series' forecasts into a single dataframe
-        all_forecasts = pd.concat(all_forecasts, axis=0, ignore_index=True)
-
-        all_forecasts.rename(
-            columns={self.data_schema.target: prediction_col_name}, inplace=True
-        )
-        return all_forecasts
-
-    def _predict_on_series(self, key_and_future_df, id, future_covariates):
-        """Make forecast on given individual series of data"""
-        key, future_df = key_and_future_df
-
-        start = self.end_index[id]
-        future_df.index = pd.RangeIndex(start=start, stop=start + len(future_df))
         exog = None
-        covariates = future_covariates
-        if covariates and self.use_exogenous:
-            exog = future_df[covariates]
-
-        if self.models.get(key) is not None:
-            forecast = self.models[key].predict(
-                steps=len(future_df),
-                exog=exog,
+        if self.use_exogenous:
+            covariates_names = (
+                self.data_schema.future_covariates + self.data_schema.static_covariates
             )
-            future_df[self.data_schema.target] = forecast.values
+            exog = [series[covariates_names] for series in all_series]
+            exog = pd.concat(exog, axis=1)
+            exog.columns = [str(i) for i in range(exog.shape[1])]
+            start = self.train_end_index + 1
+            exog.index = pd.RangeIndex(
+                start=start,
+                stop=start + self.data_schema.forecast_length,
+            )
 
-        else:
-            # no model found - key wasnt found in history, so cant forecast for it.
-            future_df = None
+        forecast = self.model.predict(steps=self.data_schema.forecast_length, exog=exog)
+        forecast.columns = [c.split("id_")[1] for c in forecast.columns]
+        predictions = []
+        for column in forecast.columns:
+            predictions += forecast[column].values.tolist()
 
-        return future_df
+        test_data[prediction_col_name] = predictions
+
+        return test_data
 
     def save(self, model_dir_path: str) -> None:
         """Save the Forecaster to disk.
@@ -327,7 +322,7 @@ def train_predictor_model(
     """
 
     model = Forecaster(data_schema=data_schema, **hyperparameters)
-    model.fit(history=history, data_schema=data_schema)
+    model.fit(history=history)
     return model
 
 
