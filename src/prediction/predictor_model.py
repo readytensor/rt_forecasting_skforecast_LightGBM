@@ -216,6 +216,7 @@ class Forecaster:
 
         targets = [series[data_schema.target] for series in all_series]
         target_series = pd.DataFrame({f"id_{k}": v for k, v in zip(all_ids, targets)})
+        target_series.columns = [f"id_{i}" for i in range(len(target_series.columns))]
 
         exog = None
 

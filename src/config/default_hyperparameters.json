@@ -1,11 +1,13 @@
 {
   "n_estimators": 200,
-  "lags": 20,
+  "lags": null,
+  "lags_forecast_ratio": 3,
   "random_state": 0,
   "learning_rate": 0.1,
   "boosting_type": "gbdt",
   "num_leaves": 3,
-  "max_depth": 30,
+  "max_depth": 10,
   "verbose": -1,
-  "history_forecast_ratio": null
+  "history_forecast_ratio": 20,
+  "use_exogenous": false
 }
