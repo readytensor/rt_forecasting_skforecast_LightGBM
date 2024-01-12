@@ -84,7 +84,7 @@ class Forecaster:
 
             random_state (int): Sets the underlying random seed at model initialization time.
 
-            kwargs (dict): Additional parameters accepted by the sklearn base model.
+            kwargs (dict): Additional parameters accepted by the base model.
         """
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
