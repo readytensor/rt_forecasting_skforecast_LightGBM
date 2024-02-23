@@ -110,7 +110,7 @@ pip install -r requirements.txt
 
 ## LICENSE
 
-This project is provided under the MIT License. Please see the [LICENSE](LICENSE) file for more information.
+This project is provided under the BSD-3-Clause License. Please see the [LICENSE](LICENSE) file for more information.
 
 ## Contact Information
 
